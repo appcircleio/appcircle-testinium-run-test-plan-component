@@ -1,7 +1,7 @@
 platform: Common
 buildPlatform:
-displayName: Testinium Plan Runner
-description: "Run your test plan with Testinium"
+displayName: Testinium Run Test Plan
+description: "Run test plan with Testinium."
 inputs:
 - key: "AC_TESTINIUM_USERNAME"
   defaultValue: "$AC_TESTINIUM_USERNAME"
@@ -23,7 +23,7 @@ inputs:
   helpText:
 - key: "AC_TESTINIUM_COMPANY_ID"
   defaultValue: "$AC_TESTINIUM_COMPANY_ID"
-  isRequired: true
+  isRequired: false
   title: Company ID
   description: "Testinium company ID."
   helpText:

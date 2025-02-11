@@ -8,12 +8,16 @@ def env_has_key(key)
   !ENV[key].nil? && ENV[key] != '' ? ENV[key] : abort("Missing #{key}.")
 end
 
+def get_env_variable(key)
+	return (ENV[key] == nil || ENV[key] == "") ? nil : ENV[key]
+end
+
 MINUTES_IN_A_DAY = 1440
 $username = env_has_key('AC_TESTINIUM_USERNAME')
 $password = env_has_key('AC_TESTINIUM_PASSWORD')
 $plan_id = env_has_key('AC_TESTINIUM_PLAN_ID')
-$ac_max_failure_percentage = (ENV['AC_TESTINIUM_MAX_FAIL_PERCENTAGE'] || 0).to_i
-$company_id = env_has_key('AC_TESTINIUM_COMPANY_ID')
+$ac_max_failure_percentage = (get_env_variable('AC_TESTINIUM_MAX_FAIL_PERCENTAGE') || 0).to_i
+$company_id = get_env_variable('AC_TESTINIUM_COMPANY_ID')
 $env_file_path = env_has_key('AC_ENV_FILE_PATH')
 $each_api_max_retry_count = env_has_key('AC_TESTINIUM_MAX_API_RETRY_COUNT').to_i
 timeout = env_has_key('AC_TESTINIUM_TIMEOUT').to_i

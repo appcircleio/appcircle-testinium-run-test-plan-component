@@ -1,4 +1,4 @@
-# Appcircle _Testinium Plan Runner_ component
+# Appcircle _Testinium Run Test Plan_ component
 
 Execute your test plans with Testinium as part of your Appcircle pipeline. This component provides seamless automation, enabling efficient test execution after application uploads using the **Testinium App Upload** step.
 
