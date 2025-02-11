@@ -3,9 +3,10 @@
 require 'net/http'
 require 'json'
 require 'date'
+require 'colored'
 
 def env_has_key(key)
-  !ENV[key].nil? && ENV[key] != '' ? ENV[key] : abort("Missing #{key}.")
+  !ENV[key].nil? && ENV[key] != '' ? ENV[key] : abort("Missing #{key}.".red)
 end
 
 def get_env_variable(key)
@@ -28,13 +29,14 @@ $time_period = 30
 def get_parsed_response(response)
   JSON.parse(response, symbolize_names: true)
 rescue JSON::ParserError, TypeError => e
-  puts "\nJSON was expected from the response of Testinium API, but the received value is: (#{response})\n. Error Message: #{e}\n"
+  puts "\nJSON expected but received: #{response}".red
+  puts "Error Message: #{e}".red
   exit(1)
 end
 
 def calc_percent(numerator, denominator)
   if !(denominator >= 0)
-    puts "Invalid numerator or denominator numbers"
+    puts "Invalid numerator or denominator numbers".red
     exit(1)
   elsif denominator == 0
     return 0
@@ -44,45 +46,41 @@ def calc_percent(numerator, denominator)
 end
 
 def check_timeout()
-  puts "Checking timeout..."
+  puts "Checking timeout...".yellow
   now = DateTime.now
 
-  if(now > $end_time)
-    puts 'The component is terminating due to a timeout exceeded.
-     If you want to allow more time, please increase the AC_TESTINIUM_TIMEOUT input value.'
+  if now > $end_time
+    puts "Timeout exceeded! Increase AC_TESTINIUM_TIMEOUT value.".red
     exit(1)
   end
 end
 
 def is_count_less_than_max_api_retry(count)
-  return count < $each_api_max_retry_count
+  count < $each_api_max_retry_count
 end
 
 def login()
-  puts "Logging in to Testinium..."
+  puts "Logging in to Testinium...".yellow
   uri = URI.parse('https://account.testinium.com/uaa/oauth/token')
   token = 'dGVzdGluaXVtU3VpdGVUcnVzdGVkQ2xpZW50OnRlc3Rpbml1bVN1aXRlU2VjcmV0S2V5'
   count = 1
 
-  while is_count_less_than_max_api_retry(count) do
+  while is_count_less_than_max_api_retry(count)
     check_timeout()
-    puts("Signing in. Number of attempts: #{count}")
+    puts "Signing in. Attempt: #{count}".blue
 
-    req = Net::HTTP::Post.new(uri.request_uri,
-                              { 'Content-Type' => 'application/json', 'Authorization' => "Basic #{token}" })
+    req = Net::HTTP::Post.new(uri.request_uri, { 'Content-Type' => 'application/json', 'Authorization' => "Basic #{token}" })
     req.set_form_data({ 'grant_type' => 'password', 'username' => $username, 'password' => $password })
-    res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true) do |http|
-      http.request(req)
-    end
+    res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true) { |http| http.request(req) }
 
-    if (res.kind_of? Net::HTTPSuccess)
-      puts('Successfully logged in...')
+    if res.is_a?(Net::HTTPSuccess)
+      puts "Successfully logged in...".green
       return get_parsed_response(res.body)[:access_token]
-    elsif (res.kind_of? Net::HTTPUnauthorized)
-      puts(get_parsed_response(res.body)[:error_description])
+    elsif res.is_a?(Net::HTTPUnauthorized)
+      puts get_parsed_response(res.body)[:error_description].red
       count += 1
     else
-      puts("Error while signing in. Response from server: #{get_parsed_response(res.body)}")
+      puts "Login error: #{get_parsed_response(res.body)}".red
       count += 1
     end
   end
@@ -93,27 +91,24 @@ def check_status(access_token)
   count = 1
   uri = URI.parse("https://testinium.io/Testinium.RestApi/api/plans/#{$plan_id}/checkIsRunning")
 
-  while is_count_less_than_max_api_retry(count) do
+  while is_count_less_than_max_api_retry(count)
     check_timeout()
-    req = Net::HTTP::Get.new(uri.request_uri,
-                             { 'Content-Type' => 'application/json', 'Authorization' => "Bearer #{access_token}", 'current-company-id' => "#{$company_id}" })
-    res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true) do |http|
-      http.request(req)
-    end
+    req = Net::HTTP::Get.new(uri.request_uri, { 'Content-Type' => 'application/json', 'Authorization' => "Bearer #{access_token}", 'current-company-id' => $company_id })
+    res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true) { |http| http.request(req) }
 
-    if (res.kind_of? Net::HTTPSuccess)
+    if res.is_a?(Net::HTTPSuccess)
       if get_parsed_response(res.body)[:running]
-        puts('Plan is still running...')
+        puts "Plan is still running...".yellow
         sleep($time_period)
       else
-        puts('Plan is not running...')
+        puts "Plan is not running.".green
         return
       end
-    elsif (res.kind_of? Net::HTTPClientError)
-      puts(get_parsed_response(res.body)[:message])
+    elsif res.is_a?(Net::HTTPClientError)
+      puts get_parsed_response(res.body)[:message].red
       count += 1
     else
-      puts("Error while checking plan status. Response from server: #{get_parsed_response(res.body)}")
+      puts "Error checking plan status: #{get_parsed_response(res.body)}".red
       count += 1
     end
   end
@@ -123,24 +118,21 @@ end
 def start(access_token)
   count = 1
 
-  while is_count_less_than_max_api_retry(count) do
+  while is_count_less_than_max_api_retry(count)
     check_timeout()
-    puts("Starting a new test plan... Number of attempts: #{count}")
+    puts "Starting test plan... Attempt: #{count}".blue
     uri = URI.parse("https://testinium.io/Testinium.RestApi/api/plans/#{$plan_id}/run")
-    req = Net::HTTP::Get.new(uri.request_uri,
-                             { 'Content-Type' => 'application/json', 'Authorization' => "Bearer #{access_token}", 'current-company-id' => "#{$company_id}" })
-    res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true) do |http|
-      http.request(req)
-    end
+    req = Net::HTTP::Get.new(uri.request_uri, { 'Content-Type' => 'application/json', 'Authorization' => "Bearer #{access_token}", 'current-company-id' => $company_id })
+    res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true) { |http| http.request(req) }
 
-    if (res.kind_of? Net::HTTPSuccess)
-      puts('Plan started successfully...')
+    if res.is_a?(Net::HTTPSuccess)
+      puts "Plan started successfully.".green
       return get_parsed_response(res.body)[:execution_id]
-    elsif (res.kind_of? Net::HTTPClientError)
-      puts(get_parsed_response(res.body)[:message])
+    elsif res.is_a?(Net::HTTPClientError)
+      puts get_parsed_response(res.body)[:message].red
       count += 1
     else
-      puts("Error while starting Plan. Response from server: #{get_parsed_response(res.body)}")
+      puts "Error starting plan: #{get_parsed_response(res.body)}".red
       count += 1
     end
   end
@@ -150,56 +142,48 @@ end
 def get_report(execution_id, access_token)
   count = 1
 
-  while is_count_less_than_max_api_retry(count) do
+  while is_count_less_than_max_api_retry(count)
     check_timeout()
-    puts("Starting to get the report...Number of attempts: #{count}")
+    puts "Fetching test report... Attempt: #{count}".blue
     uri = URI.parse("https://testinium.io/Testinium.RestApi/api/executions/#{execution_id}")
-    req = Net::HTTP::Get.new(uri.request_uri,
-                             { 'Content-Type' => 'application/json', 'Authorization' => "Bearer #{access_token}", 'current-company-id' => "#{$company_id}" })
-    res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true) do |http|
-      http.request(req)
-    end
+    req = Net::HTTP::Get.new(uri.request_uri, { 'Content-Type' => 'application/json', 'Authorization' => "Bearer #{access_token}", 'current-company-id' => $company_id })
+    res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true) { |http| http.request(req) }
 
-    if (res.kind_of? Net::HTTPSuccess)
-      puts('Report received successfully...')
+    if res.is_a?(Net::HTTPSuccess)
+      puts "Test report received.".green
 
       data = get_parsed_response(res.body)
       result_summary = data[:result_summary]
       result_failure_summary = result_summary[:FAILURE] || 0
       result_error_summary = result_summary[:ERROR] || 0
       result_success_summary = result_summary[:SUCCESS] || 0
-      puts "Test result summary: #{result_summary}"
-      total_summary = result_failure_summary + result_error_summary + result_success_summary
 
-      open("#{$env_file_path}", 'a') { |f|
+      puts "Test result summary: #{result_summary}".yellow
+
+      open($env_file_path, 'a') do |f|
         f.puts "AC_TESTINIUM_RESULT_FAILURE_SUMMARY=#{result_failure_summary}"
         f.puts "AC_TESTINIUM_RESULT_ERROR_SUMMARY=#{result_error_summary}"
         f.puts "AC_TESTINIUM_RESULT_SUCCESS_SUMMARY=#{result_success_summary}"
-      }
+      end
 
       if $ac_max_failure_percentage > 0 && result_failure_summary > 0
-        failure_percentage = calc_percent(result_failure_summary, total_summary)
+        failure_percentage = calc_percent(result_failure_summary, result_failure_summary + result_success_summary)
         max_failure_percentage = calc_percent($ac_max_failure_percentage, 100)
 
         if max_failure_percentage <= failure_percentage || !result_summary[:ERROR].nil?
-          puts "The number of failures in the plan exceeded the maximum rate. The process is being stopped. #{data[:test_result_status_counts]}"
+          puts "Failure rate exceeded! Stopping execution.".red
           exit(1)
         else
-          puts("Number of failures is below the maximum rate. Process continues. #{data[:test_result_status_counts]}")
+          puts "Failure rate within limits. Continuing...".green
         end
-      else
-        warn_message = "To calculate the failure rate, the following values must be greater than 0:" \
-          "\nAC_TESTINIUM_MAX_FAIL_PERCENTAGE: #{$ac_max_failure_percentage}" \
-          "\nTestinium Result Failure Summary: #{result_failure_summary}"
-        puts warn_message
       end
 
       return
-    elsif (res.kind_of? Net::HTTPClientError)
-      puts(get_parsed_response(res.body)[:message])
+    elsif res.is_a?(Net::HTTPClientError)
+      puts get_parsed_response(res.body)[:message].red
       count += 1
     else
-      puts("Error while starting Plan. Response from server: #{get_parsed_response(res.body)}")
+      puts "Error fetching report: #{get_parsed_response(res.body)}".red
       count += 1
     end
   end
