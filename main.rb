@@ -89,6 +89,7 @@ end
 
 def check_status(access_token)
   count = 1
+  puts "Selected Plan ID: #{$plan_id}".blue
   uri = URI.parse("https://testinium.io/Testinium.RestApi/api/plans/#{$plan_id}/checkIsRunning")
 
   while is_count_less_than_max_api_retry(count)
