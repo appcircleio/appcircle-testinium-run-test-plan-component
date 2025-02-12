@@ -50,13 +50,13 @@ def check_timeout()
   now = DateTime.now
 
   if now > $end_time
-    puts "Timeout exceeded! Increase AC_TESTINIUM_TIMEOUT value.".red
+    puts "Timeout exceeded! If you want to allow more time, please increase the AC_TESTINIUM_TIMEOUT input value.".red
     exit(1)
   end
 end
 
 def is_count_less_than_max_api_retry(count)
-  count < $each_api_max_retry_count
+  return count < $each_api_max_retry_count
 end
 
 def login()
