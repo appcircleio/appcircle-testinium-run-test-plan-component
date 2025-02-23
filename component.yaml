@@ -15,6 +15,24 @@ inputs:
   title: Password
   description: "Testinium password."
   helpText:
+- key: "AC_TESTINIUM_ENTERPRISE_BASE_URL"
+  defaultValue: "$AC_TESTINIUM_ENTERPRISE_BASE_URL"
+  isRequired: false
+  title: Testinium Enterprise Base URL
+  description: "The base URL for Testinium enterprise. This is required if you are using Testinium enterprise. For cloud users, this input is not mandatory."
+  helpText:
+- key: "AC_TESTINIUM_UPLOADED_APP_ID"
+  defaultValue: "$AC_TESTINIUM_UPLOADED_APP_ID"
+  isRequired: true
+  title: "Uploaded Application ID"
+  description: "The unique identifier for the application uploaded to Testinium. This ID is generated after the **Testinium App Upload** step."
+  helpText:
+- key: "AC_TESTINIUM_APP_OS"
+  defaultValue: "$AC_TESTINIUM_APP_OS"
+  isRequired: true
+  title: "Application Operating System"
+  description: "The operating system of the uploaded application, either iOS or Android. This value is determined after the **Testinium App Upload** step."
+  helpText:
 - key: "AC_TESTINIUM_PLAN_ID"
   defaultValue: "$AC_TESTINIUM_PLAN_ID"
   isRequired: true

@@ -6,25 +6,31 @@ require 'date'
 require 'colored'
 
 def env_has_key(key)
-  !ENV[key].nil? && ENV[key] != '' ? ENV[key] : abort("Missing #{key}.".red)
+  ENV[key].nil? || ENV[key].empty? ? abort("Missing #{key}.".red) : ENV[key]
 end
 
 def get_env_variable(key)
-  return (ENV[key] == nil || ENV[key] == "") ? nil : ENV[key]
+  ENV[key].nil? || ENV[key].empty? ? nil : ENV[key]
 end
 
 MINUTES_IN_A_DAY = 1440
 $username = env_has_key('AC_TESTINIUM_USERNAME')
 $password = env_has_key('AC_TESTINIUM_PASSWORD')
 $plan_id = env_has_key('AC_TESTINIUM_PLAN_ID')
-$ac_max_failure_percentage = (get_env_variable('AC_TESTINIUM_MAX_FAIL_PERCENTAGE') || 0).to_i
 $company_id = get_env_variable('AC_TESTINIUM_COMPANY_ID')
+$uploaded_app_id = env_has_key('AC_TESTINIUM_UPLOADED_APP_ID')
+$app_os = env_has_key('AC_TESTINIUM_APP_OS')
 $env_file_path = env_has_key('AC_ENV_FILE_PATH')
+$output_dir = env_has_key('AC_OUTPUT_DIR')
 $each_api_max_retry_count = env_has_key('AC_TESTINIUM_MAX_API_RETRY_COUNT').to_i
-timeout = env_has_key('AC_TESTINIUM_TIMEOUT').to_i
-date_now = DateTime.now
-$end_time = date_now + Rational(timeout, MINUTES_IN_A_DAY)
-$time_period = 30
+$end_time = DateTime.now + Rational(env_has_key('AC_TESTINIUM_TIMEOUT').to_i, MINUTES_IN_A_DAY)
+$check_api_time_period = 30
+$cloud_base_url = "https://testinium.io/"
+$ent_base_url = get_env_variable('AC_TESTINIUM_ENTERPRISE_BASE_URL')
+
+def get_base_url
+  URI.join($ent_base_url || $cloud_base_url, "Testinium.RestApi/api").to_s
+end
 
 def get_parsed_response(response)
   JSON.parse(response, symbolize_names: true)
@@ -34,165 +40,146 @@ rescue JSON::ParserError, TypeError => e
   exit(1)
 end
 
-def calc_percent(numerator, denominator)
-  if !(denominator >= 0)
-    puts "Invalid numerator or denominator numbers".red
-    exit(1)
-  elsif denominator == 0
-    return 0
-  else
-    return numerator.to_f / denominator.to_f * 100.0
-  end
-end
-
-def check_timeout()
-  puts "Checking timeout...".yellow
-  now = DateTime.now
-
-  if now > $end_time
-    puts "Timeout exceeded! If you want to allow more time, please increase the AC_TESTINIUM_TIMEOUT input value.".red
+def check_timeout
+  if DateTime.now > $end_time
+    puts "Timeout exceeded! Increase AC_TESTINIUM_TIMEOUT if needed.".red
     exit(1)
   end
 end
 
-def is_count_less_than_max_api_retry(count)
-  return count < $each_api_max_retry_count
-end
-
-def login()
-  puts "Logging in to Testinium...".yellow
-  uri = URI.parse('https://account.testinium.com/uaa/oauth/token')
-  token = 'dGVzdGluaXVtU3VpdGVUcnVzdGVkQ2xpZW50OnRlc3Rpbml1bVN1aXRlU2VjcmV0S2V5'
+def retry_request(max_retries)
   count = 1
-
-  while is_count_less_than_max_api_retry(count)
-    check_timeout()
-    puts "Signing in. Attempt: #{count}".blue
-
-    req = Net::HTTP::Post.new(uri.request_uri, { 'Content-Type' => 'application/json', 'Authorization' => "Basic #{token}" })
-    req.set_form_data({ 'grant_type' => 'password', 'username' => $username, 'password' => $password })
-    res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true) { |http| http.request(req) }
-
-    if res.is_a?(Net::HTTPSuccess)
-      puts "Successfully logged in...".green
-      return get_parsed_response(res.body)[:access_token]
-    elsif res.is_a?(Net::HTTPUnauthorized)
-      puts get_parsed_response(res.body)[:error_description].red
-      count += 1
-    else
-      puts "Login error: #{get_parsed_response(res.body)}".red
-      count += 1
-    end
+  while count <= max_retries
+    check_timeout
+    yield(count)
+    count += 1
   end
+  puts "Max retries exceeded.".red
   exit(1)
+end
+
+def send_request(method, url, headers, body = nil)
+  use_ssl = get_base_url.match?(/^https/)
+  uri = URI.parse(url)
+  req = case method.upcase
+        when 'GET'
+          Net::HTTP::Get.new(uri.request_uri, headers)
+        when 'POST'
+          post_req = Net::HTTP::Post.new(uri.request_uri, headers)
+          post_req.set_form_data(body) if body
+          post_req
+        when 'PUT'
+          put_req = Net::HTTP::Put.new(uri.request_uri, headers)
+          put_req.body = body.to_json if body
+          put_req
+        else
+          raise "Unsupported HTTP method: #{method}"
+        end
+
+  Net::HTTP.start(uri.hostname, uri.port, use_ssl: $use_ssl) { |http| http.request(req) }
+end
+
+def handle_api_response(res, action, parsed = true)
+  case res
+  when Net::HTTPSuccess
+    puts "#{action.capitalize} successful.".green
+    return parsed ? get_parsed_response(res.body) : nil
+  when Net::HTTPUnauthorized
+    puts "Authorization error while #{action}: #{get_parsed_response(res.body)[:error_description]}".red
+  when Net::HTTPClientError
+    puts "Client error while #{action}: #{get_parsed_response(res.body)[:message]}".red
+  else
+    puts "Unexpected error while #{action}: #{get_parsed_response(res.body)}".red
+  end
+  return nil
+end
+
+def login
+  puts "Logging in to Testinium...".yellow
+  base_url = $ent_base_url ? get_base_url.sub("/api", "") : "https://account.testinium.com/uaa"
+
+  # Testinium's login API uses a public generic token for authentication. More details:  
+  # Cloud: https://testinium.gitbook.io/testinium/apis/auth/login  
+  # Enterprise: https://testinium.gitbook.io/testinium-enterprise/apis/auth/login 
+  token = $ent_base_url ? "Y2xpZW50MTpjbGllbnQx" : "dGVzdGluaXVtU3VpdGVUcnVzdGVkQ2xpZW50OnRlc3Rpbml1bVN1aXRlU2VjcmV0S2V5"
+  url = "#{base_url}/oauth/token"
+  headers = { 'Content-Type' => 'application/x-www-form-urlencoded', 'Authorization' => "Basic #{token}" }
+  body = { 'grant_type' => 'password', 'username' => $username, 'password' => $password }
+
+  retry_request($each_api_max_retry_count) do
+    res = send_request('POST', url, headers, body)
+    parsed_response = handle_api_response(res, "logging")
+    return parsed_response[:access_token] if parsed_response
+  end
 end
 
 def check_status(access_token)
-  count = 1
-  puts "Selected Plan ID: #{$plan_id}".blue
-  uri = URI.parse("https://testinium.io/Testinium.RestApi/api/plans/#{$plan_id}/checkIsRunning")
+  puts "Checking plan status...".blue
+  url = "#{get_base_url}/plans/#{$plan_id}/checkIsRunning"
+  headers = { 'Content-Type' => 'application/json', 'Authorization' => "Bearer #{access_token}", 'current-company-id' => $company_id }
 
-  while is_count_less_than_max_api_retry(count)
-    check_timeout()
-    req = Net::HTTP::Get.new(uri.request_uri, { 'Content-Type' => 'application/json', 'Authorization' => "Bearer #{access_token}", 'current-company-id' => $company_id })
-    res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true) { |http| http.request(req) }
-
-    if res.is_a?(Net::HTTPSuccess)
-      if get_parsed_response(res.body)[:running]
-        puts "Plan is still running...".yellow
-        sleep($time_period)
-      else
-        puts "Plan is not running.".green
-        return
-      end
-    elsif res.is_a?(Net::HTTPClientError)
-      puts get_parsed_response(res.body)[:message].red
-      count += 1
+  retry_request($each_api_max_retry_count) do
+    res = send_request('GET', url, headers)
+    parsed_response = handle_api_response(res, "checking the plan")
+    next unless parsed_response 
+    
+    if parsed_response[:running] == false
+      puts "Plan is not running.".green
+      return
     else
-      puts "Error checking plan status: #{get_parsed_response(res.body)}".red
-      count += 1
+      puts "Plan is still running...".yellow
     end
+    
+    sleep($check_api_time_period)
   end
-  exit(1)
+end
+
+def select_app(access_token)
+  puts "Starting select #{$app_os} app (ID=#{$uploaded_app_id}) for the test plan...".blue
+  url = "#{get_base_url}/plans/#{$plan_id}/set#{$app_os}MobileApp/#{$uploaded_app_id}"
+  headers = { 'Content-Type' => 'application/json', 'Authorization' => "Bearer #{access_token}" }
+
+  retry_request($each_api_max_retry_count) do
+    res = send_request('PUT', url, headers)
+    parsed_response = handle_api_response(res, "selecting the application")
+    return parsed_response if parsed_response
+  end
 end
 
 def start(access_token)
-  count = 1
+  puts "Starting test plan...".blue
+  url = "#{get_base_url}/plans/#{$plan_id}/run"
+  headers = { 'Content-Type' => 'application/json', 'Authorization' => "Bearer #{access_token}", 'current-company-id' => $company_id }
 
-  while is_count_less_than_max_api_retry(count)
-    check_timeout()
-    puts "Starting test plan... Attempt: #{count}".blue
-    uri = URI.parse("https://testinium.io/Testinium.RestApi/api/plans/#{$plan_id}/run")
-    req = Net::HTTP::Get.new(uri.request_uri, { 'Content-Type' => 'application/json', 'Authorization' => "Bearer #{access_token}", 'current-company-id' => $company_id })
-    res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true) { |http| http.request(req) }
-
-    if res.is_a?(Net::HTTPSuccess)
-      puts "Plan started successfully.".green
-      return get_parsed_response(res.body)[:execution_id]
-    elsif res.is_a?(Net::HTTPClientError)
-      puts get_parsed_response(res.body)[:message].red
-      count += 1
-    else
-      puts "Error starting plan: #{get_parsed_response(res.body)}".red
-      count += 1
-    end
+  retry_request($each_api_max_retry_count) do
+    res = send_request('GET', url, headers)
+    parsed_response = handle_api_response(res, "starting test plan")
+    return parsed_response[:execution_id] if parsed_response
   end
-  exit(1)
 end
 
 def get_report(execution_id, access_token)
-  count = 1
+  puts "Fetching test report...".blue
+  base_url = get_base_url + ($ent_base_url ? "/testExecutions" : "/executions")
+  url = "#{base_url}/#{execution_id}"
+  headers = { 'Content-Type' => 'application/json', 'Authorization' => "Bearer #{access_token}", 'current-company-id' => $company_id }
+  report_file_path = "#{$output_dir}/test_report_#{execution_id}.json"
 
-  while is_count_less_than_max_api_retry(count)
-    check_timeout()
-    puts "Fetching test report... Attempt: #{count}".blue
-    uri = URI.parse("https://testinium.io/Testinium.RestApi/api/executions/#{execution_id}")
-    req = Net::HTTP::Get.new(uri.request_uri, { 'Content-Type' => 'application/json', 'Authorization' => "Bearer #{access_token}", 'current-company-id' => $company_id })
-    res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true) { |http| http.request(req) }
+  retry_request($each_api_max_retry_count) do
+    res = send_request('GET', url, headers)
+    parsed_response = handle_api_response(res, "fetching test report")
+    return parsed_response if parsed_response == nil
 
-    if res.is_a?(Net::HTTPSuccess)
-      puts "Test report received.".green
-
-      data = get_parsed_response(res.body)
-      result_summary = data[:result_summary]
-      result_failure_summary = result_summary[:FAILURE] || 0
-      result_error_summary = result_summary[:ERROR] || 0
-      result_success_summary = result_summary[:SUCCESS] || 0
-
-      puts "Test result summary: #{result_summary}".yellow
-
-      open($env_file_path, 'a') do |f|
-        f.puts "AC_TESTINIUM_RESULT_FAILURE_SUMMARY=#{result_failure_summary}"
-        f.puts "AC_TESTINIUM_RESULT_ERROR_SUMMARY=#{result_error_summary}"
-        f.puts "AC_TESTINIUM_RESULT_SUCCESS_SUMMARY=#{result_success_summary}"
-      end
-
-      if $ac_max_failure_percentage > 0 && result_failure_summary > 0
-        failure_percentage = calc_percent(result_failure_summary, result_failure_summary + result_success_summary)
-        max_failure_percentage = calc_percent($ac_max_failure_percentage, 100)
-
-        if max_failure_percentage <= failure_percentage || !result_summary[:ERROR].nil?
-          puts "Failure rate exceeded! Stopping execution.".red
-          exit(1)
-        else
-          puts "Failure rate within limits. Continuing...".green
-        end
-      end
-
-      return
-    elsif res.is_a?(Net::HTTPClientError)
-      puts get_parsed_response(res.body)[:message].red
-      count += 1
-    else
-      puts "Error fetching report: #{get_parsed_response(res.body)}".red
-      count += 1
-    end
+    File.write(report_file_path, JSON.pretty_generate(get_parsed_response(res.body)))
+    File.write($env_file_path, "AC_TESTINIUM_TEST_REPORT=#{File.expand_path(report_file_path)}\n", mode: 'a')
+    puts "Test report saved.".green
+    return
   end
-  exit(1)
 end
 
 access_token = login()
 check_status(access_token)
+select_app(access_token) if $ent_base_url
 execution_id = start(access_token)
 check_status(access_token)
 get_report(execution_id, access_token)
