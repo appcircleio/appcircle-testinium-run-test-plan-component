@@ -19,6 +19,7 @@ $password = env_has_key('AC_TESTINIUM_PASSWORD')
 $plan_id = env_has_key('AC_TESTINIUM_PLAN_ID')
 $company_id = get_env_variable('AC_TESTINIUM_COMPANY_ID')
 $uploaded_app_id = env_has_key('AC_TESTINIUM_UPLOADED_APP_ID')
+$ac_max_failure_percentage = (ENV['AC_TESTINIUM_MAX_FAIL_PERCENTAGE'] || 0).to_i
 $app_os = env_has_key('AC_TESTINIUM_APP_OS')
 $env_file_path = env_has_key('AC_ENV_FILE_PATH')
 $output_dir = env_has_key('AC_OUTPUT_DIR')
@@ -36,14 +37,12 @@ def get_parsed_response(response)
   JSON.parse(response, symbolize_names: true)
 rescue JSON::ParserError, TypeError => e
   puts "\nJSON expected but received: #{response}".red
-  puts "Error Message: #{e}".red
-  exit(1)
+  abort "Error Message: #{e}".red
 end
 
 def check_timeout
   if DateTime.now > $end_time
-    puts "Timeout exceeded! Increase AC_TESTINIUM_TIMEOUT if needed.".red
-    exit(1)
+    abort "Timeout exceeded! Increase AC_TESTINIUM_TIMEOUT if needed.".red
   end
 end
 
@@ -54,8 +53,7 @@ def retry_request(max_retries)
     yield(count)
     count += 1
   end
-  puts "Max retries exceeded.".red
-  exit(1)
+  abort "Max retries exceeded.".red
 end
 
 def send_request(method, url, headers, body = nil)
@@ -170,9 +168,38 @@ def get_report(execution_id, access_token)
     parsed_response = handle_api_response(res, "fetching test report")
     return parsed_response if parsed_response == nil
 
-    File.write(report_file_path, JSON.pretty_generate(get_parsed_response(res.body)))
-    File.write($env_file_path, "AC_TESTINIUM_TEST_REPORT=#{File.expand_path(report_file_path)}\n", mode: 'a')
-    puts "Test report saved.".green
+    File.write(report_file_path, JSON.pretty_generate(parsed_response))
+    result_summary = parsed_response[:result_summary]
+    puts "Test result summary: #{result_summary}".yellow
+    result_failure_summary = result_summary[:FAILURE] || 0
+    result_error_summary = result_summary[:ERROR] || 0
+    result_success_summary = result_summary[:SUCCESS] || 0
+
+    open($env_file_path, 'a') do |f|
+      f.puts "AC_TESTINIUM_RESULT_FAILURE_SUMMARY=#{result_failure_summary}"
+      f.puts "AC_TESTINIUM_RESULT_ERROR_SUMMARY=#{result_error_summary}"
+      f.puts "AC_TESTINIUM_RESULT_SUCCESS_SUMMARY=#{result_success_summary}"
+      f.puts "AC_TESTINIUM_TEST_REPORT=#{report_file_path}"
+    end
+
+    puts "Test report has been successfully saved.".green
+    puts "📊 Test plan results:".green
+    puts "   ❌ Errors: #{result_error_summary}".red
+    puts "   ⚠️ Failures: #{result_failure_summary}".yellow
+    puts "   ✅ Successes: #{result_success_summary}".green
+    
+    abort "❗ Test execution stopped due to errors!" if result_error_summary > 0
+
+    if $ac_max_failure_percentage > 0 && result_failure_summary > 0
+      failure_percentage = calc_percent(result_failure_summary, result_failure_summary + result_success_summary)
+      max_failure_percentage = calc_percent($ac_max_failure_percentage, 100)
+
+      if max_failure_percentage <= failure_percentage
+        abort "Failure rate exceeded! Stopping execution.".red
+      else
+        puts "Failure rate within limits. Continuing...".green
+      end
+    end
     return
   end
 end
