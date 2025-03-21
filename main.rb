@@ -40,6 +40,16 @@ rescue JSON::ParserError, TypeError => e
   abort "Error Message: #{e}".red
 end
 
+def calc_percent(numerator, denominator)
+  if !(denominator >= 0)
+    abort "Invalid numerator or denominator numbers".red
+  elsif denominator == 0
+    return 0
+  else
+    return numerator.to_f / denominator.to_f * 100.0
+  end
+end
+
 def check_timeout
   if DateTime.now > $end_time
     abort "Timeout exceeded! Increase AC_TESTINIUM_TIMEOUT if needed.".red
