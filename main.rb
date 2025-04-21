@@ -65,7 +65,7 @@ def retry_request(max_retries)
 end
 
 def send_request(method, url, headers, body = nil)
-  $use_ssl = get_base_url.match?(/^https/)
+  use_ssl = get_base_url.match?(/^https/)
   uri = URI.parse(url)
   req = case method.upcase
         when 'GET'
@@ -82,7 +82,7 @@ def send_request(method, url, headers, body = nil)
           raise "Unsupported HTTP method: #{method}"
         end
 
-  Net::HTTP.start(uri.hostname, uri.port, use_ssl: $use_ssl) { |http| http.request(req) }
+  Net::HTTP.start(uri.hostname, uri.port, use_ssl: use_ssl) { |http| http.request(req) }
 end
 
 def handle_api_response(res, action, parsed = true)

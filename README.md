@@ -15,7 +15,7 @@ Execute your test plans with Testinium as part of your Appcircle pipeline. This 
 
 ## Optional Inputs
 
-- `AC_TESTINIUM_ENTERPRISE_BASE_URL`: The base URL for Testinium enterprise. This is required if you are using Testinium enterprise. Only for Testinium cloud users, this input is not mandatory.
+- `AC_TESTINIUM_ENTERPRISE_BASE_URL`: The base URL for Testinium enterprise. This input is only required for Testinium enterprise users. Cloud users can ignore it.
 - `AC_TESTINIUM_MAX_FAIL_PERCENTAGE`: Maximum failure percentage limit to interrupt workflow. It must be in the range 0-100. Selecting 0 means failures will not interrupt the workflow.
 
 ## Output Variables
