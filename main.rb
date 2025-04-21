@@ -65,7 +65,7 @@ def retry_request(max_retries)
 end
 
 def send_request(method, url, headers, body = nil)
-  use_ssl = get_base_url.match?(/^https/)
+  $use_ssl = get_base_url.match?(/^https/)
   uri = URI.parse(url)
   req = case method.upcase
         when 'GET'
