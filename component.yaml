@@ -23,15 +23,15 @@ inputs:
   helpText:
 - key: "AC_TESTINIUM_UPLOADED_APP_ID"
   defaultValue: "$AC_TESTINIUM_UPLOADED_APP_ID"
-  isRequired: true
+  isRequired: false
   title: "Uploaded Application ID"
-  description: "The unique identifier for the application uploaded to Testinium. This ID is generated after the **Testinium App Upload** step."
+  description: "The unique identifier for the application uploaded to Testinium. This ID is generated after the **Testinium App Upload** step when using Testinium as an enterprise solution."
   helpText:
 - key: "AC_TESTINIUM_APP_OS"
   defaultValue: "$AC_TESTINIUM_APP_OS"
-  isRequired: true
+  isRequired: false
   title: "Application Operating System"
-  description: "The operating system of the uploaded application, either iOS or Android. This value is determined after the **Testinium App Upload** step."
+  description: "The operating system of the uploaded application, either iOS or Android. This value is determined after the **Testinium App Upload** step when using Testinium as an enterprise solution."
   helpText:
 - key: "AC_TESTINIUM_PLAN_ID"
   defaultValue: "$AC_TESTINIUM_PLAN_ID"
@@ -61,7 +61,7 @@ inputs:
   defaultValue: "4"
   isRequired: true
   title: Testinium Maximum API Repetition Count
-  description: "Determine max repetition in case of Testinium platform congestion or API errors."
+  description: "Determine max retry in case of Testinium platform congestion or API errors."
   helpText:
 outputs:
 - key: "AC_TESTINIUM_TEST_REPORT"

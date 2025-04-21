@@ -18,9 +18,7 @@ $username = env_has_key('AC_TESTINIUM_USERNAME')
 $password = env_has_key('AC_TESTINIUM_PASSWORD')
 $plan_id = env_has_key('AC_TESTINIUM_PLAN_ID')
 $company_id = get_env_variable('AC_TESTINIUM_COMPANY_ID')
-$uploaded_app_id = env_has_key('AC_TESTINIUM_UPLOADED_APP_ID')
 $ac_max_failure_percentage = (get_env_variable('AC_TESTINIUM_MAX_FAIL_PERCENTAGE') || 0).to_i
-$app_os = env_has_key('AC_TESTINIUM_APP_OS')
 $env_file_path = env_has_key('AC_ENV_FILE_PATH')
 $output_dir = env_has_key('AC_OUTPUT_DIR')
 $each_api_max_retry_count = env_has_key('AC_TESTINIUM_MAX_API_RETRY_COUNT').to_i
@@ -143,6 +141,8 @@ def check_status(access_token)
 end
 
 def select_app(access_token)
+  $uploaded_app_id = env_has_key('AC_TESTINIUM_UPLOADED_APP_ID')
+  $app_os = env_has_key('AC_TESTINIUM_APP_OS')
   puts "Starting select #{$app_os} app (ID=#{$uploaded_app_id}) for the test plan...".blue
   url = "#{get_base_url}/plans/#{$plan_id}/set#{$app_os}MobileApp/#{$uploaded_app_id}"
   headers = { 'Content-Type' => 'application/json', 'Authorization' => "Bearer #{access_token}" }
