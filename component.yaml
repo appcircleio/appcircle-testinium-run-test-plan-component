@@ -60,7 +60,7 @@ inputs:
 - key: "AC_TESTINIUM_MAX_API_RETRY_COUNT"
   defaultValue: "4"
   isRequired: true
-  title: Testinium Maximum API Repetition Count
+  title: Testinium Maximum API Retry Count
   description: "Determine max retry in case of Testinium platform congestion or API errors."
   helpText:
 outputs:
