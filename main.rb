@@ -157,12 +157,20 @@ end
 def start(access_token)
   puts "Starting test plan...".blue
   url = "#{get_base_url}/plans/#{$plan_id}/run"
-  headers = { 'Content-Type' => 'application/json', 'Authorization' => "Bearer #{access_token}", 'current-company-id' => $company_id }
+  headers = {
+    'Content-Type' => 'application/json',
+    'Authorization' => "Bearer #{access_token}",
+    'current-company-id' => $company_id
+  }
 
   retry_request($each_api_max_retry_count) do
     res = send_request('GET', url, headers)
     parsed_response = handle_api_response(res, "starting test plan")
-    return parsed_response[:execution_id] if parsed_response
+    if parsed_response && parsed_response[:execution_id]
+      return parsed_response[:execution_id]
+    else
+      puts "Plan cannot start. Please check the test plan on Testinium.".red
+    end
   end
 end
 
